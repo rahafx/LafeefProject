@@ -3,7 +3,7 @@
 pragma experimental ABIEncoderV2;
 pragma solidity >=0.7.0 <0.9.0;
 
-/* import "./Investment.sol"; */
+import "./Investment.sol";
 
 contract Campaign {
   
@@ -40,7 +40,7 @@ contract Campaign {
     Failed
   }
 
-  enum Models{
+  enum Models {
     keep_it_all, /*if >= 95% */
     all_or_nothing
   }
@@ -82,17 +82,18 @@ contract Campaign {
       return val;
   }
 
-
 /*-------------------- Transfer fund from contract wallet to owner wallet ---------------------- */
   function Transfer_money(uint campaign_id, uint milestone_id) public {
-    /* transfer fund from contract wallet to owner wallet*/
-    
-    /* m_countDown(campaign_id, milestone_id); */
+    uint fund = milestones[campaign_id][milestone_id];
+    address owner = campaigns[campaign_id].owner;
+    owner.transfer(fund);
+    updateRemaining(campaign_id, fund);
+    m_countDown(campaign_id, milestone_id);
   }
 
 
 /*-------------------- Return fund 2 investors ---------------------- */
-  function retrievrFund() public{
+  function retrievrFund(uint campaign_id) public{
      /* retriveAllInvestors(campaign_id);  from investment contract */
   }
 
@@ -232,7 +233,7 @@ contract Campaign {
 
 /* -------------------------- Extend milestone ---------------------------- */
   function extendMS(uint campaign_id, uint milestone_id, uint _addT) public {
-      bool result = voting(campaign_id, milestone_id, _addT);
+      /* bool result = voting(campaign_id, milestone_id, _addT); */
 
       if (result == true) {
           milestones[campaign_id][milestone_id].state = MState.extend;
@@ -242,6 +243,7 @@ contract Campaign {
           for(uint i = milestone_id; i < count; i++) {
             milestones[campaign_id][milestone_id].duration = (milestones[campaign_id][milestone_id].duration + addT);
           }
+
       }
   }
 

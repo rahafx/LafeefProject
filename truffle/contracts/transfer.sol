@@ -10,15 +10,16 @@ contract transfer{
 
 /*  --------------------- from contract to owner --------------------- */
 /* milestone fund */
-    function send(address payable _to) public payable {
-        _to.transfer(msg.value);
+    function sendFund(address payable _to) public payable {
+        uint x = address(this).balance-5;
+        _to.transfer(x);
     }
 
 /* -------------------- from contract to investors ------------------- */
 /* investors[] */
-   function returnFund() public payable {
-   }
-   
+    function returnFund() public payable {
+    }
+
     function get() public view returns (uint) {
         return address(this).balance;
     }
