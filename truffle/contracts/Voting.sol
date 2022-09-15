@@ -12,46 +12,45 @@ contract Voting{
         bool voted;
     }
 
+    struct result{
+        uint c_id;
+        uint votingResult;
+        uint votedYes;
+        uint votedNo;
+    }
+
     Campaign campaigns = new Campaign();
     Investment investment = new Investment();
     mapping(uint => mapping(address => Voter)) public C_voters;
     mapping(uint => mapping(uint => mapping(address => Voter))) public M_voters;
+    mapping(uint => result) C_result;
+    mapping(uint => mapping(uint => result)) M_result;
+
     uint campaignnumbers = campaigns.campaignnumbers();
     uint investrsnumber;
 
 
-    function campaign_extend(uint campign_id , uint value) public returns(bool){
-        uint voteYes;
-        bool result;
+
+    function campaign_extend(uint campign_id , uint value) public{
         getVoters(campign_id);
         require(!C_voters[campign_id][msg.sender].voted);
+
         if(value == 1){
-            voteYes++;
-            if(voteYes > (investrsnumber/2)){
-                result= true;
-            }
-        }else{
-            // error or a message with not completed yet
+            C_result[campign_id].votedYes++;
         }
 
-        return result;
+        C_result[campign_id].votingResult++;
     }
 
-    function milestone_extend(uint campaign_id, uint milestone_id, uint value) public returns(bool){
-        uint voteYes;
-        bool result;
+    function milestone_extend(uint campaign_id, uint milestone_id, uint value) public{
         getVoters(campaign_id , milestone_id);
         require(!M_voters[campaign_id][milestone_id][msg.sender].voted);
+
         if(value == 1){
-            voteYes++;
-            if(voteYes > (investrsnumber/2)){
-                result= true;
-            }
-        }else{
-            // error or a message with not completed yet
+            M_result[campaign_id][milestone_id].votedYes++;
         }
 
-        return result;
+        M_result[campaign_id][milestone_id].votingResult++;
     }
 
     function next_milestone(uint campaign_id, uint milestone_id) public returns(string memory){
@@ -82,5 +81,29 @@ contract Voting{
 
     }
 
+
+    function c_countDown(uint campaign_id, uint DL) view public returns(bool) {
+        uint timeNow = block.timestamp;
+        uint finalResult = C_result[campaign_id].votingResult;
+
+        while(timeNow != DL  || finalResult != investrsnumber){
+            timeNow = block.timestamp;
+        }
+
+        return true;
+    
+    }
+
+    function m_countDown(uint campaign_id, uint milestone_id, uint DL) view public returns(bool) {
+        uint timeNow = block.timestamp;
+        uint finalResult = M_result[campaign_id][milestone_id].votingResult;
+
+        while(timeNow != DL  || finalResult != investrsnumber){
+            timeNow = block.timestamp;
+        }
+
+        return true;
+    
+    }
 
 }
