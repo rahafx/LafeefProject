@@ -22,9 +22,11 @@ contract Voting{
     Campaign campaigns = new Campaign();
     Investment investment = new Investment();
     mapping(uint => mapping(address => Voter)) public C_voters;
-    mapping(uint => mapping(uint => mapping(address => Voter))) public M_voters;
     mapping(uint => result) C_result;
-    mapping(uint => mapping(uint => result)) M_result;
+    mapping(uint => mapping(uint => mapping(address => Voter))) public NM_voters;
+    mapping(uint => mapping(uint => mapping(address => Voter))) public EM_voters;
+    mapping(uint => mapping(uint => result)) EM_result;
+    mapping(uint => mapping(uint => result)) NM_result;
 
     uint campaignnumbers = campaigns.campaignnumbers();
     uint investrsnumber;
@@ -42,21 +44,35 @@ contract Voting{
         C_result[campign_id].votingResult++;
     }
 
-    function milestone_extend(uint campaign_id, uint milestone_id, uint value) public{
-        getVoters(campaign_id , milestone_id);
-        require(!M_voters[campaign_id][milestone_id][msg.sender].voted);
 
-        if(value == 1){
-            M_result[campaign_id][milestone_id].votedYes++;
+    function milestone_extend(uint campaign_id, uint milestone_id, uint votingValue, uint milestoneValue , uint DL) public{
+            getVoters(campaign_id , milestone_id, milestoneValue);
+            while(m_countDown(campaign_id, milestone_id, DL)){
+                if(milestoneValue == 0){
+                    require(!EM_voters[campaign_id][milestone_id][msg.sender].voted);
+
+                    if(votingValue == 1){
+                        EM_result[campaign_id][milestone_id].votedYes;
+                    }
+
+                    EM_result[campaign_id][milestone_id].votingResult++;
+                    EM_voters[campaign_id][milestone_id][msg.sender].voted = true;
+
+                }else if(milestoneValue == 1){
+                    require(!NM_voters[campaign_id][milestone_id][msg.sender].voted);
+
+                    if(votingValue == 1){
+                        NM_result[campaign_id][milestone_id].votedYes++;
+                    }
+
+                    NM_result[campaign_id][milestone_id].votingResult++;
+                    NM_voters[campaign_id][milestone_id][msg.sender].voted = true;
+                }
+
         }
-
-        M_result[campaign_id][milestone_id].votingResult++;
+        
+        
     }
-
-    function next_milestone(uint campaign_id, uint milestone_id) public returns(string memory){
-
-    }
-
 
 
     function getVoters(uint campaign_id) public{
@@ -70,15 +86,21 @@ contract Voting{
 
     }
 
-    function getVoters(uint campaign_id, uint milestone_id) public{
+    function getVoters(uint campaign_id, uint milestone_id , uint value) public{
         uint count; address[] memory investors; uint[] memory funds;
         (count , investors, funds) = investment.retrieveInvestors(campaign_id);
         investrsnumber = count;
+        if(value == 0 ){
+            for(uint i=0 ; i<investrsnumber ; i++){
+                EM_voters[campaign_id][milestone_id][investors[i]] = Voter(investors[i] , false);
+         }
 
-        for(uint i=0 ; i<investrsnumber ; i++){
-            M_voters[campaign_id][milestone_id][investors[i]] = Voter(investors[i] , false);
+        }else if(value == 1 ){
+            for(uint i=0 ; i<investrsnumber ; i++){
+                NM_voters[campaign_id][milestone_id][investors[i]] = Voter(investors[i] , false);
+         }
+
         }
-
     }
 
 
@@ -96,9 +118,10 @@ contract Voting{
 
     function m_countDown(uint campaign_id, uint milestone_id, uint DL) view public returns(bool) {
         uint timeNow = block.timestamp;
-        uint finalResult = M_result[campaign_id][milestone_id].votingResult;
+        uint finalResultNM = NM_result[campaign_id][milestone_id].votingResult;
+        uint finalResultEM = NM_result[campaign_id][milestone_id].votingResult;
 
-        while(timeNow != DL  || finalResult != investrsnumber){
+        while(timeNow != DL  || finalResultNM != investrsnumber || finalResultEM != investrsnumber){
             timeNow = block.timestamp;
         }
 
