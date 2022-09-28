@@ -31,8 +31,7 @@ contract Voting{
     uint campaignnumbers = campaigns.campaignnumbers();
     uint investrsnumber;
 
-
-
+  
     function campaign_extend(uint campign_id , uint value) public{
         getVoters(campign_id);
         require(!C_voters[campign_id][msg.sender].voted);
@@ -45,8 +44,7 @@ contract Voting{
     }
 
 
-    function milestone_extend(uint campaign_id, uint milestone_id, uint votingValue, uint milestoneValue , uint DL) public{
-            getVoters(campaign_id , milestone_id, milestoneValue);
+    function milestone_voting(uint campaign_id, uint milestone_id, uint votingValue, uint milestoneValue , uint DL) public{
             while(m_countDown(campaign_id, milestone_id, DL)){
                 if(milestoneValue == 0){
                     require(!EM_voters[campaign_id][milestone_id][msg.sender].voted);
@@ -119,7 +117,7 @@ contract Voting{
     function m_countDown(uint campaign_id, uint milestone_id, uint DL) view public returns(bool) {
         uint timeNow = block.timestamp;
         uint finalResultNM = NM_result[campaign_id][milestone_id].votingResult;
-        uint finalResultEM = NM_result[campaign_id][milestone_id].votingResult;
+        uint finalResultEM = EM_result[campaign_id][milestone_id].votingResult;
 
         while(timeNow != DL  || finalResultNM != investrsnumber || finalResultEM != investrsnumber){
             timeNow = block.timestamp;
@@ -129,4 +127,20 @@ contract Voting{
     
     }
 
+    function startMilestoneVoting(uint campaign_id, uint milestone_id , uint value, uint DL) public returns(bool){
+        getVoters(campaign_id , milestone_id, value);
+
+        return m_countDown(campaign_id,milestone_id,DL);
+    }
+
+    function startCampaignVoting(uint campaign_id, uint DL) public returns(bool){
+        getVoters(campaign_id);
+
+        return c_countDown( campaign_id,  DL);
+    }
+
+
 }
+
+
+
