@@ -4,15 +4,20 @@ pragma experimental ABIEncoderV2;
 pragma solidity >=0.7.0 <0.9.0;
 
 import "./Investment.sol";
+import "./Voting.sol";
 
 contract Campaign {
-  
+
+    Investment investment = new Investment();
+    Voting voting = new Voting();
   /* Milestone */
     enum MState {
-    created,
-    inprogress,
-    extend,
-    completed
+      created,
+      undervote,
+      inprogress,
+      completed,
+      rejected,
+      failed
   }
 
   struct milestone {
@@ -29,25 +34,26 @@ contract Campaign {
   /* Round State */
   enum RoundState {
     Inprogress,
-    Success, 
+    Success,
     Failed
   }
 
     /* Campaign State */
   enum CState {
     Inprogress,
+    UnderVote,
     Close,
     Failed
   }
 
   enum Models {
-    keep_it_all, /*if >= 95% */
+    keep_it_all,
     all_or_nothing
   }
 
   struct campaign {
     uint id;
-    address owner;
+    address payable owner;
     uint capital;
     uint shares;
     uint starttime;
@@ -56,6 +62,7 @@ contract Campaign {
     uint minimumInvest;
     Models model;
     uint numberOfmilestones;
+    uint currentMilestone;
     CState state;
   }
 
@@ -84,35 +91,28 @@ contract Campaign {
 
 /*-------------------- Transfer fund from contract wallet to owner wallet ---------------------- */
   function Transfer_money(uint campaign_id, uint milestone_id) public {
-    uint fund = milestones[campaign_id][milestone_id];
-    address owner = campaigns[campaign_id].owner;
+    uint fund = milestones[campaign_id][milestone_id].fund;
+    address payable owner = campaigns[campaign_id].owner;
     owner.transfer(fund);
-    updateRemaining(campaign_id, fund);
+    investment.updateRemaining(campaign_id, fund);
     m_countDown(campaign_id, milestone_id);
   }
 
-
-/*-------------------- Return fund 2 investors ---------------------- */
-  function retrievrFund(uint campaign_id) public{
-     /* retriveAllInvestors(campaign_id);  from investment contract */
-  }
-
-
-
-/* -----------------------------------create and retrieve Campaign------------------------------------ */
+/* ----------------------------------- create campaign ------------------------------------ */
   function createcampaign(uint capital, uint shares, uint deadline1, uint deadline2, uint minimumInvest, uint numberOfmilestones, Models model, string[][] memory milestones) public {
       /* milestones[], */
       addMilestones(numberOfmilestones, milestones);
       uint now = block.timestamp;
       uint dL1 = (deadline1*24*60*60) + now;
       uint dL2 = (deadline2*24*60*60) + dL1;
-      campaigns[campaignnumbers] = campaign(campaignnumbers, msg.sender, capital, shares, now, dL1, dL2, minimumInvest, model, numberOfmilestones, CState.Inprogress);
+      campaigns[campaignnumbers] = campaign(campaignnumbers, payable(msg.sender), capital, shares, now, dL1, dL2, minimumInvest, model, numberOfmilestones, 0, CState.Inprogress);
       Rounds[campaignnumbers][0] = RoundState.Inprogress;
       TotalRounds[campaignnumbers] = 0;
       campaignnumbers++;
-     /* c_countDown(campaignnumbers-1, dL1); */
+     c_countDown(campaignnumbers-1, dL1);
   }
 
+/* ----------------------------------- retrieve AllCampaigns ------------------------------------ */
   function RetrieveAll() public view returns (campaign[] memory) {
       campaign[] memory AllCampaigns = new campaign[](campaignnumbers);
         for(uint i=0; i<campaignnumbers; i++){
@@ -121,10 +121,22 @@ contract Campaign {
         }
        return AllCampaigns;
   }
-
-  function RetrieveOne(uint campaign_id) public view returns (campaign memory) {
-      return campaigns[campaign_id];
+/* ----------------------------------- retrieve OneCampaign ------------------------------------ */
+  function RetrieveOne(uint campaign_id) public view returns (campaign memory, bool) {
+    bool isInvestor;
+    if(investment.checkAddress(campaign_id, msg.sender)){
+            isInvestor = true;
+    }
+    else{
+            isInvestor = false;
+    }
+    return (campaigns[campaign_id], isInvestor);
+      /* 1- check round state
+         2- if under vote (check if this investor is voted or not)
+         3- if success (check milestone state)
+         4- if under vote (check if this investor is voted or not) */
   }
+        
 
 /* -----------------------------------add and retrieve Milestones------------------------------------ */
   function addMilestones(uint _numberOfmilestones, string[][] memory _milestones) public {
@@ -144,23 +156,30 @@ contract Campaign {
        return AllMilestones;
   }
 
-  function RetrieveOneMilestone(uint campaign_id, uint milestone_id) public view returns (milestone memory) {
-      return milestones[campaign_id][milestone_id];
+  function RetrieveOneMilestone(uint campaign_id, uint milestone_id) public view returns (milestone memory, bool) {
+    bool isInvestor;
+    if(investment.checkAddress(campaign_id, msg.sender)){
+            isInvestor = true;
+    }
+    else{
+            isInvestor = false;
+    }
+      return (milestones[campaign_id][milestone_id], isInvestor);
   }
 
 
-/*-------------------------------- CountDown ------------------------------- */
+/* -------------------------------- CountDown ------------------------------- */
   function c_countDown(uint campaign_id, uint DL) public {
     uint now = block.timestamp;
     while(now != DL ){
       now = block.timestamp;
     }
-    C_deadline1(campaign_id);
+    C_deadline(campaign_id);
   }
 
   function m_countDown(uint campaign_id, uint milestone_id) public {
     milestones[campaign_id][milestone_id].state = MState.inprogress;
-    uint now = block.timestamp ;
+    uint now = block.timestamp;
     uint duration = milestones[campaign_id][milestone_id].duration;
     uint deadline = (duration*24*60*60) + now;
 
@@ -172,83 +191,150 @@ contract Campaign {
   }
 
 
-/* ----------------------------------- Campaign Deadline ------------------------------- */
-  function C_deadline1(uint campaign_id) public {
-     /* ------ check total investment from investment contract ------ */
-    uint c_capital = 1500;
+/* ----------------------------------- Campaign Deadline (updated one) ------------------------------- */
+     function C_deadline(uint campaign_id) public {
+        /* ------ check total investment from investment contract ------ */
+        uint c_capital = investment.retrieveFund(campaign_id);
 
-      /* -------- finding the capital percentage -------- */
-    uint total = (c_capital*100)/campaigns[campaign_id].capital;
+        /* -------- finding the capital percentage -------- */
+        uint total = (c_capital*100)/campaigns[campaign_id].capital;
+        
+        if(campaigns[campaign_id].capital == c_capital || campaigns[campaign_id].model == Models.keep_it_all && total >= 95){
+          campaigns[campaign_id].state = CState.Close;
+          if(TotalRounds[campaignnumbers] == 0){
+              Rounds[campaignnumbers][0] = RoundState.Success;
+              Transfer_money(campaign_id, 0);
+           }
 
-    if (campaigns[campaign_id].capital == c_capital) {  /* Transfer_money(campaign_id, 0); */
-        Rounds[campaignnumbers][0] = RoundState.Success;
-        m_countDown(campaign_id, 0);
-    }
-
-    else if (campaigns[campaign_id].model == Models.keep_it_all && total >= 95){  /* Transfer_money(campaign_id, 0); */
-        Rounds[campaignnumbers][0] = RoundState.Success;
-        updateMilestonesFund(campaign_id);
-        m_countDown(campaign_id, 0);
-    }
-
-    else {  /* call campaign voting from voting contract */
-        Rounds[campaignnumbers][0] = RoundState.Failed;
-
-        if(TotalRounds[campaignnumbers] == 0){
-
-          TotalRounds[campaignnumbers] = 1;
-          string memory result = ""; /* voting(campain_id, deadline2); */
-
-          if(keccak256(bytes(result)) == keccak256(bytes("extend"))){
-            Rounds[campaignnumbers][1] = RoundState.Inprogress;
-            c_countDown(campaign_id, (campaigns[campaign_id].deadline2));
-          }
-          else {
-            Rounds[campaignnumbers][1] = RoundState.Failed;
-            campaigns[campaign_id].state = CState.Failed;
-            /* transfer money from contracts to investors */
-          }
+          else{
+            Rounds[campaignnumbers][1] = RoundState.Success;
+            Transfer_money(campaign_id, 0);
+           }
         }
-    }
-  }
+        else{
+          if(TotalRounds[campaignnumbers] == 0){
+              Rounds[campaignnumbers][0] = RoundState.Failed;
+              campaigns[campaign_id].state = CState.UnderVote;
+              bool result = voting.campaignExtend(campaign_id);
+
+              if(result == true){
+                TotalRounds[campaign_id] = 1;
+                campaigns[campaign_id].state = CState.Inprogress;
+                /* ----- Deadline2 ------ */
+                uint deadline = campaigns[campaign_id].deadline2;
+                uint now = block.timestamp;
+                deadline = deadline + now;
+                c_countDown(campaign_id, deadline);
+              }
+              else{
+                investment.returnFund(campaign_id);
+                campaigns[campaign_id].state = CState.Failed;
+              }
+           }
+
+          else{
+              investment.returnFund(campaign_id);
+              campaigns[campaign_id].state = CState.Failed;
+           }
+        }
+     }
+     /* check collected fund
+     if(completed or >95%){
+          if( round 1){
+            1-Round1.state= Success
+            2-transfer fund
+          }
+          else if( round2 ){
+            1-Round2.state = success
+            2-transfer fund
+          }
+     }
+     else{
+          if( round1 ){
+            1- Round1.state = failed
+            2- voting
+                - if true()
+                   - TotalRounds[campaignnumbers] = 1;
+                   - countdown;
+                - if false()
+                   -retrieve fund to investors;
+          }
+          else if(round 2){
+            1-round2.state = failed
+            2-retrieve fund to investors
+          }
+     } */
 
 /* ----------------------------------- Milestone Deadline ------------------------------- */
   function MS_Deadline(uint campaign_id, uint milestone_id) public {
-    /* if it's last milestone close campaign */
-    bool result; /*voting(campaign_id, milestone_id, milestones[campaign_id][milestone_id].state) */
 
-    if(result == true){
-     /* transfer next milestone fund */
+    /* if it's last milestone*/
+    if((milestone_id+1) == campaigns[campaign_id].numberOfmilestones){
+      campaigns[campaign_id].state = CState.Close;
     }
+
+    else{
+
+      if(milestones[campaign_id][milestone_id].state == MState.completed){
+        uint next_MS = milestone_id+1;
+        milestones[campaign_id][next_MS].state = MState.undervote;
+        bool result = voting.nextMilestone(campaign_id, next_MS);
+        if(result == true) {
+            /* transfer next milestone fund */
+            Transfer_money(campaign_id, milestone_id);
+        }
+        else {
+           /* return fund 2 investors*/
+            milestones[campaign_id][next_MS].state = MState.rejected;
+           investment.returnFund(campaign_id);
+        }
+    }
+
     else {
-     /* return fund 2 investors*/
+      milestones[campaign_id][milestone_id].state = MState.failed;
+      investment.returnFund(campaign_id);
     }
+    }
+    
   }
 
-/* -------------------------------- update milestone state (complete or extend) ------------------------------- */
-  function updateState(uint campaign_id, uint milestone_id, MState _state) public {
-      /* if it's not updated to complete or extend it will be closed */
-    milestones[campaign_id][milestone_id].state = _state;
+/* -------------------------------- update milestone state (complete) => (from frontend)------------------------------- */
+  function ms_complete(uint campaign_id, uint milestone_id) public {
+    milestones[campaign_id][milestone_id].state = MState.completed;
   }
 
-/* -------------------------- Extend milestone ---------------------------- */
-  function extendMS(uint campaign_id, uint milestone_id, uint _addT) public {
-      /* bool result = voting(campaign_id, milestone_id, _addT); */
-
+/* -------------------------- Extend milestone => (from frontend) ---------------------------- */
+  function ms_extend(uint campaign_id, uint milestone_id, uint _addT) public {
+    milestones[campaign_id][milestone_id].state = MState.undervote;
+      bool result = voting(campaign_id, milestone_id, _addT);
       if (result == true) {
-          milestones[campaign_id][milestone_id].state = MState.extend;
           uint addT = (_addT*24*60*60);
           uint count = campaigns[campaign_id].numberOfmilestones;
 
           for(uint i = milestone_id; i < count; i++) {
             milestones[campaign_id][milestone_id].duration = (milestones[campaign_id][milestone_id].duration + addT);
           }
+      }
+      else if(result == false){
+        milestones[campaign_id][milestone_id].state = MState.failed;
+        investment.returnFund(campaign_id);
 
       }
   }
 
 
-/* -------------------------- Update milestones funds keep_it_all  ---------------------------- */
+
+
+
+
+
+
+
+
+
+
+
+/* -------------------------- Update milestones funds (keep_it_all) ---------------------------- */
   function updateMilestonesFund(uint campaign_id) public {
       /* - 5% from every milestone fund  */
       uint count = campaigns[campaign_id].numberOfmilestones;
@@ -259,7 +345,6 @@ contract Campaign {
           milestones[campaign_id][i].fund = fund;
       }
   }
-
 
 /* 2000, 20, 30, 40, 100, 2, [["first", "150", "20"],["second", "200", "30"]] */
 }
